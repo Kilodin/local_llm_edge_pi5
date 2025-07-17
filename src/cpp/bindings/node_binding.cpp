@@ -3,12 +3,15 @@
 #include <memory>
 #include <thread>
 #include <functional>
+#include <iostream> // Added for logging
+#include <cstddef>  // Added for std::flush
 
 class LLMNodeBinding : public Napi::ObjectWrap<LLMNodeBinding> {
 private:
     std::unique_ptr<local_llm::InferenceEngine> engine_;
     Napi::ThreadSafeFunction callback_tsfn_;
     std::thread worker_thread_;
+    bool callback_tsfn_initialized_ = false;
 
 public:
     static Napi::Object Init(Napi::Env env, Napi::Object exports) {
@@ -31,16 +34,24 @@ public:
     }
 
     LLMNodeBinding(const Napi::CallbackInfo& info) : Napi::ObjectWrap<LLMNodeBinding>(info) {
+        std::cerr << "[LLMNodeBinding] Constructor called, this=" << this << std::endl << std::flush;
         engine_ = std::make_unique<local_llm::InferenceEngine>();
     }
 
     ~LLMNodeBinding() {
+        std::cerr << "[LLMNodeBinding] Destructor called, this=" << this << std::endl << std::flush;
+        engine_->stop_generation();
         if (worker_thread_.joinable()) {
             worker_thread_.join();
+        }
+        if (callback_tsfn_initialized_) {
+            callback_tsfn_.Release();
+            callback_tsfn_initialized_ = false;
         }
     }
 
     Napi::Value Initialize(const Napi::CallbackInfo& info) {
+        std::cerr << "[LLMNodeBinding] Initialize called, this=" << this << std::endl << std::flush;
         Napi::Env env = info.Env();
         
         if (info.Length() < 1 || !info[0].IsObject()) {
@@ -97,6 +108,7 @@ public:
     }
 
     Napi::Value Generate(const Napi::CallbackInfo& info) {
+        std::cerr << "[LLMNodeBinding] Generate called, this=" << this << ", engine_=" << engine_.get() << std::endl << std::flush;
         Napi::Env env = info.Env();
         
         if (info.Length() < 1 || !info[0].IsString()) {
@@ -105,6 +117,7 @@ public:
         }
 
         std::string prompt = info[0].As<Napi::String>().Utf8Value();
+        std::cerr << "[LLMNodeBinding] Prompt received: '" << prompt << "'" << std::endl << std::flush;
         int max_tokens = 256;
         
         if (info.Length() > 1 && info[1].IsNumber()) {
@@ -116,6 +129,7 @@ public:
     }
 
     Napi::Value GenerateStream(const Napi::CallbackInfo& info) {
+        std::cerr << "[LLMNodeBinding] GenerateStream called, this=" << this << std::endl << std::flush;
         Napi::Env env = info.Env();
         
         if (info.Length() < 2 || !info[0].IsString() || !info[1].IsFunction()) {
@@ -131,6 +145,18 @@ public:
             max_tokens = info[2].As<Napi::Number>().Int32Value();
         }
 
+        // Stop any previous generation first
+        engine_->stop_generation();
+        if (worker_thread_.joinable()) {
+            worker_thread_.join();
+        }
+
+        // Release previous ThreadSafeFunction if it exists
+        if (callback_tsfn_initialized_) {
+            callback_tsfn_.Release();
+            callback_tsfn_initialized_ = false;
+        }
+
         // Create thread-safe function for callback
         callback_tsfn_ = Napi::ThreadSafeFunction::New(
             env,
@@ -139,6 +165,7 @@ public:
             0,
             1
         );
+        callback_tsfn_initialized_ = true;
 
         // Start generation in worker thread
         worker_thread_ = std::thread([this, prompt, max_tokens]() {
@@ -154,17 +181,20 @@ public:
     }
 
     Napi::Value IsReady(const Napi::CallbackInfo& info) {
+        std::cerr << "[LLMNodeBinding] IsReady called, this=" << this << std::endl << std::flush;
         Napi::Env env = info.Env();
         return Napi::Boolean::New(env, engine_->is_ready());
     }
 
     Napi::Value GetModelInfo(const Napi::CallbackInfo& info) {
+        std::cerr << "[LLMNodeBinding] GetModelInfo called, this=" << this << std::endl << std::flush;
         Napi::Env env = info.Env();
         std::string info_str = engine_->get_model_info();
         return Napi::String::New(env, info_str);
     }
 
     Napi::Value SetTemperature(const Napi::CallbackInfo& info) {
+        std::cerr << "[LLMNodeBinding] SetTemperature called, this=" << this << std::endl << std::flush;
         Napi::Env env = info.Env();
         
         if (info.Length() < 1 || !info[0].IsNumber()) {
@@ -178,6 +208,7 @@ public:
     }
 
     Napi::Value SetTopP(const Napi::CallbackInfo& info) {
+        std::cerr << "[LLMNodeBinding] SetTopP called, this=" << this << std::endl << std::flush;
         Napi::Env env = info.Env();
         
         if (info.Length() < 1 || !info[0].IsNumber()) {
@@ -191,6 +222,7 @@ public:
     }
 
     Napi::Value SetTopK(const Napi::CallbackInfo& info) {
+        std::cerr << "[LLMNodeBinding] SetTopK called, this=" << this << std::endl << std::flush;
         Napi::Env env = info.Env();
         
         if (info.Length() < 1 || !info[0].IsNumber()) {
@@ -204,6 +236,7 @@ public:
     }
 
     Napi::Value SetRepeatPenalty(const Napi::CallbackInfo& info) {
+        std::cerr << "[LLMNodeBinding] SetRepeatPenalty called, this=" << this << std::endl << std::flush;
         Napi::Env env = info.Env();
         
         if (info.Length() < 1 || !info[0].IsNumber()) {
@@ -217,6 +250,7 @@ public:
     }
 
     Napi::Value StopGeneration(const Napi::CallbackInfo& info) {
+        std::cerr << "[LLMNodeBinding] StopGeneration called, this=" << this << std::endl << std::flush;
         Napi::Env env = info.Env();
         engine_->stop_generation();
         return env.Undefined();

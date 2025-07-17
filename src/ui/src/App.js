@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import { Send, Settings, Download, Upload, Bot, User, X, Play, Square } from 'lucide-react';
 import './App.css';
 
-const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:3002';
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
 function App() {
   const [messages, setMessages] = useState([]);
@@ -18,6 +18,10 @@ function App() {
   const [systemInfo, setSystemInfo] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [showInit, setShowInit] = useState(false);
+  const [messageIdCounter, setMessageIdCounter] = useState(0);
+  const isInitializingRef = useRef(false);
+  const currentStreamingContentRef = useRef('');
+  const streamingTimeoutRef = useRef(null);
   const [initConfig, setInitConfig] = useState({
     modelPath: '',
     contextSize: 2048,
@@ -39,18 +43,70 @@ function App() {
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
+    console.log('App useEffect called - setting up socket and checking initialization');
     // Initialize socket connection
     const newSocket = io(API_BASE);
     setSocket(newSocket);
 
     // Socket event handlers
     newSocket.on('stream-chunk', (data) => {
+      console.log('Received stream chunk:', data);
+      
+      // Check if this is the completion signal
+      if (data.text === '[DONE]') {
+        console.log('Received [DONE] signal, stopping streaming');
+        console.log('Current isStreaming state before update:', isStreaming);
+        console.log('Current isLoading state before update:', isLoading);
+        
+        // Clear the timeout
+        if (streamingTimeoutRef.current) {
+          clearTimeout(streamingTimeoutRef.current);
+          streamingTimeoutRef.current = null;
+        }
+        
+        // Always force the states to false when [DONE] is received
+        setIsStreaming(false);
+        setIsLoading(false);
+        console.log('Forced isStreaming and isLoading to false.');
+        
+        // Reset streaming content
+        currentStreamingContentRef.current = '';
+        return;
+      }
+      
+      // Build the complete response by appending new text
+      const newContent = currentStreamingContentRef.current + data.text;
+      
+      // Check if this would create duplicate content
+      if (newContent === currentStreamingContentRef.current) {
+        console.log('No new content to add, ignoring chunk');
+        return;
+      }
+      
+      // Update tracking content
+      currentStreamingContentRef.current = newContent;
+      
       setMessages(prev => {
         const newMessages = [...prev];
-        if (newMessages.length > 0 && newMessages[newMessages.length - 1].type === 'assistant') {
-          newMessages[newMessages.length - 1].content = data.text;
+        
+        // Check if we need to create a new assistant message
+        if (newMessages.length === 0 || newMessages[newMessages.length - 1].type !== 'assistant') {
+          // Create new assistant message with the complete content
+          const newMessage = {
+            id: `${Date.now()}-${messageIdCounter}-${Math.random()}`,
+            type: 'assistant',
+            content: newContent,
+            timestamp: new Date().toLocaleTimeString(),
+            isError: false
+          };
+          setMessageIdCounter(prev => prev + 1);
+          return [...newMessages, newMessage];
+        } else {
+          // Replace the entire content of the existing assistant message
+          console.log('Updating content to:', newContent);
+          newMessages[newMessages.length - 1].content = newContent;
+          return newMessages;
         }
-        return newMessages;
       });
     });
 
@@ -65,15 +121,72 @@ function App() {
       setIsLoading(false);
     });
 
-    // Check server status
-    checkServerStatus();
-
+    // Check server status and auto-initialize model if needed
+    const checkAndInit = async () => {
+      if (isInitializingRef.current) {
+        console.log('Initialization already in progress, skipping checkAndInit.');
+        return;
+      }
+      try {
+        console.log('Checking backend health...');
+        const response = await axios.get(`${API_BASE}/api/health`);
+        console.log('Health response:', response.data);
+        setIsInitialized(response.data.initialized);
+        setSystemInfo(response.data.systemInfo);
+        if (!response.data.initialized) {
+          console.log('Backend not initialized, calling /api/initialize...');
+          setIsLoading(true);
+          isInitializingRef.current = true;
+          addMessage('system', 'Initializing default model...');
+          const initConfig = {
+            modelPath: '/home/kilodin/local_llm_edge_pi5/models/tinyllama-1.1b-chat.gguf',
+            contextSize: 2048,
+            batchSize: 512,
+            threads: 4,
+            gpuLayers: 0,
+            temperature: 0.7,
+            topP: 0.9,
+            topK: 40,
+            repeatPenalty: 1.1,
+            seed: 42
+          };
+          console.log('Calling /api/initialize with', initConfig);
+          const initResp = await axios.post(`${API_BASE}/api/initialize`, initConfig);
+          console.log('Init response:', initResp.data);
+          if (initResp.data.success) {
+            setIsInitialized(true);
+            setModelInfo(initResp.data.modelInfo);
+            addMessage('system', 'Default model initialized successfully! 🎉');
+          } else {
+            addMessage('system', 'Failed to initialize default model', true);
+          }
+        } else {
+          if (response.data.initialized) {
+            const modelResponse = await axios.get(`${API_BASE}/api/model-info`);
+            setModelInfo(modelResponse.data.info);
+          }
+        }
+      } catch (error) {
+        console.error('Initialization error:', error);
+        addMessage('system', `Initialization error: ${error.response?.data?.error || error.message}`, true);
+      } finally {
+        setIsLoading(false);
+        isInitializingRef.current = false;
+      }
+    };
+    console.log('About to call checkAndInit()');
+    checkAndInit();
     return () => newSocket.close();
   }, []);
 
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Debug useEffect to monitor state changes
+  useEffect(() => {
+    console.log('State changed - isStreaming:', isStreaming, 'isLoading:', isLoading);
+  }, [isStreaming, isLoading]);
 
   const checkServerStatus = async () => {
     try {
@@ -96,18 +209,24 @@ function App() {
 
   const addMessage = (type, content, isError = false) => {
     const newMessage = {
-      id: Date.now(),
+      id: `${Date.now()}-${messageIdCounter}`,
       type,
       content,
       timestamp: new Date().toLocaleTimeString(),
       isError
     };
+    setMessageIdCounter(prev => prev + 1);
     setMessages(prev => [...prev, newMessage]);
   };
 
   const initializeModel = async () => {
+    if (isInitializingRef.current) {
+      console.log('Initialization already in progress, ignoring duplicate request.');
+      return;
+    }
     try {
       setIsLoading(true);
+      isInitializingRef.current = true; // Set flag to true
       const response = await axios.post(`${API_BASE}/api/initialize`, initConfig);
       
       if (response.data.success) {
@@ -122,6 +241,7 @@ function App() {
       addMessage('system', `Initialization error: ${error.response?.data?.error || error.message}`, true);
     } finally {
       setIsLoading(false);
+      isInitializingRef.current = false; // Reset flag
     }
   };
 
@@ -150,8 +270,17 @@ function App() {
     setIsLoading(true);
     setIsStreaming(true);
 
-    // Add assistant message placeholder
-    addMessage('assistant', '');
+    // Reset streaming content for new generation
+    currentStreamingContentRef.current = '';
+
+    // Add a timeout fallback to ensure states are reset
+    streamingTimeoutRef.current = setTimeout(() => {
+      console.log('Timeout fallback: Resetting streaming states');
+      setIsStreaming(false);
+      setIsLoading(false);
+    }, 30000); // 30 seconds timeout
+
+    // Don't create empty assistant message here - let streaming create it
 
     try {
       // Use streaming for better UX
@@ -160,6 +289,10 @@ function App() {
         maxTokens: 256
       });
     } catch (error) {
+      if (streamingTimeoutRef.current) {
+        clearTimeout(streamingTimeoutRef.current);
+        streamingTimeoutRef.current = null;
+      }
       setIsStreaming(false);
       setIsLoading(false);
       addMessage('assistant', `Error: ${error.message}`, true);
@@ -220,6 +353,12 @@ function App() {
                     <Download size={16} />
                     Initialize Model
                   </button>
+                )}
+                {systemInfo && (
+                  <div className="system-info">
+                    <h3>System Information</h3>
+                    <pre>{systemInfo}</pre>
+                  </div>
                 )}
               </div>
             ) : (

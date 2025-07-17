@@ -38,7 +38,7 @@ public:
                         int max_tokens = 256);
     
     // Check if model is loaded
-    bool is_loaded() const { return ctx_ != nullptr; }
+    bool is_loaded() const { return model_ != nullptr; }
     
     // Get model info
     std::string get_model_info() const;
@@ -48,6 +48,9 @@ public:
     void set_top_p(float top_p) { config_.top_p = top_p; }
     void set_top_k(int top_k) { config_.top_k = top_k; }
     void set_repeat_penalty(float penalty) { config_.repeat_penalty = penalty; }
+    
+    // Cleanup backend (call at application shutdown)
+    static void cleanup_backend();
 
 private:
     llama_context* ctx_;
