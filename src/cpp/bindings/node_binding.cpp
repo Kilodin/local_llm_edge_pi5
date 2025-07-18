@@ -197,9 +197,9 @@ public:
                 std::cerr << "[LLMNodeBinding] Received text from engine: '" << text << "' (length: " << text.length() << ")" << std::endl;
                 auto callback = [text](Napi::Env env, Napi::Function js_callback) {
                     try {
-                        std::cerr << "[LLMNodeBinding] Executing JS callback with text: '" << text << "'" << std::endl;
+                        // std::cerr << "[LLMNodeBinding] Executing JS callback with text: '" << text << "'" << std::endl;
                         js_callback.Call({Napi::String::New(env, text)});
-                        std::cerr << "[LLMNodeBinding] JS callback completed successfully" << std::endl;
+                        // std::cerr << "[LLMNodeBinding] JS callback completed successfully" << std::endl;
                     } catch (const std::exception& e) {
                         std::cerr << "[LLMNodeBinding] Exception in callback: " << e.what() << std::endl;
                     }

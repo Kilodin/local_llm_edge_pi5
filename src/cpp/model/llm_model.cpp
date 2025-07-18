@@ -114,7 +114,7 @@ void LLMModel::generate_stream(const std::string& prompt,
     const llama_vocab* vocab = llama_model_get_vocab(model_);
     if (llama_vocab_get_add_bos(vocab)) {
         input_tokens.insert(input_tokens.begin(), llama_vocab_bos(vocab));
-        std::cerr << "[LLMModel] Added BOS token, total tokens: " << input_tokens.size() << std::endl;
+        // std::cerr << "[LLMModel] Added BOS token, total tokens: " << input_tokens.size() << std::endl;
     }
     try {
         for (size_t i = 0; i < input_tokens.size(); i += config_.batch_size) {
@@ -130,10 +130,10 @@ void LLMModel::generate_stream(const std::string& prompt,
         std::string full_result;
         int tokens_generated = 0;
         int loop_iterations = 0;
-        std::cerr << "[LLMModel] Starting generation loop, max_tokens: " << max_tokens << std::endl;
+        // std::cerr << "[LLMModel] Starting generation loop, max_tokens: " << max_tokens << std::endl;
         for (int i = 0; i < max_tokens; ++i) {
             loop_iterations++;
-            std::cerr << "[LLMModel] Loop iteration " << loop_iterations << "/" << max_tokens << std::endl;
+            // std::cerr << "[LLMModel] Loop iteration " << loop_iterations << "/" << max_tokens << std::endl;
             float* logits = llama_get_logits(ctx_);
             if (!logits) {
                 callback("Failed to get logits");
@@ -143,7 +143,7 @@ void LLMModel::generate_stream(const std::string& prompt,
             int vocab_size = llama_vocab_n_tokens(vocab);
             std::vector<float> logits_vec(logits, logits + vocab_size);
             llama_token next_token = sample_next_token(logits_vec);
-            std::cerr << "[LLMModel] Generated token " << i << ": " << next_token << " (EOS: " << llama_vocab_eos(vocab) << ")" << std::endl;
+            // std::cerr << "[LLMModel] Generated token " << i << ": " << next_token << " (EOS: " << llama_vocab_eos(vocab) << ")" << std::endl;
             if (next_token == llama_vocab_eos(vocab)) {
                 std::cerr << "[LLMModel] Hit EOS token, stopping generation" << std::endl;
                 break;
@@ -151,7 +151,7 @@ void LLMModel::generate_stream(const std::string& prompt,
             tokens_generated++;
             char piece[32]; // Increased buffer size for longer tokens
             int n_piece = llama_token_to_piece(vocab, next_token, piece, sizeof(piece), 0, false);
-            std::cerr << "[LLMModel] Token " << next_token << " -> n_piece: " << n_piece << std::endl;
+            // std::cerr << "[LLMModel] Token " << next_token << " -> n_piece: " << n_piece << std::endl;
             if (n_piece > 0) {
                 std::string token_text(piece, n_piece);
                 full_result += token_text;
@@ -162,9 +162,9 @@ void LLMModel::generate_stream(const std::string& prompt,
                 std::cerr << "[LLMModel] Warning: n_piece <= 0 for token " << next_token << std::endl;
             }
             llama_batch batch = llama_batch_get_one(&next_token, 1);
-            std::cerr << "[LLMModel] About to decode token " << next_token << std::endl;
+            // std::cerr << "[LLMModel] About to decode token " << next_token << std::endl;
             int ret = llama_decode(ctx_, batch);
-            std::cerr << "[LLMModel] Decode result for token " << next_token << ": " << ret << std::endl;
+            // std::cerr << "[LLMModel] Decode result for token " << next_token << ": " << ret << std::endl;
             if (ret != 0) {
                 std::cerr << "[LLMModel] Failed to decode generated token, ret=" << ret << std::endl;
                 callback("Failed to decode generated token");

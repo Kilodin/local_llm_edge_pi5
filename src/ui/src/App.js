@@ -11,9 +11,9 @@ const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 // GenerationMetrics component
 function GenerationMetrics({ metrics }) {
   const [isExpanded, setIsExpanded] = useState(false);
-  
+
   if (!metrics) return null;
-  
+
   return (
     <div className="generation-metrics">
       {/* Compact Header - Always Visible */}
@@ -24,7 +24,7 @@ function GenerationMetrics({ metrics }) {
         </span>
         <span className="expand-icon">{isExpanded ? '▼' : '▶'}</span>
       </div>
-      
+
       {/* Expanded Content - Only visible when expanded */}
       {isExpanded && (
         <div className="metrics-expanded">
@@ -130,6 +130,7 @@ function App() {
   const isInitializingRef = useRef(false);
   const currentStreamingContentRef = useRef('');
   const streamingTimeoutRef = useRef(null);
+
   const [initConfig, setInitConfig] = useState({
     modelPath: '',
     contextSize: 2048,
@@ -151,29 +152,29 @@ function App() {
     typicalP: 1.0,
     tfsZ: 1.0,
     topA: 0.0,
-    
+
     // Penalty parameters
     repeatPenalty: 1.1,
     repeatPenaltyLastN: 64,
     frequencyPenalty: 0.0,
     presencePenalty: 0.0,
-    
+
     // Mirostat parameters
     mirostatTau: 5.0,
     mirostatEta: 0.1,
     mirostatM: 100,
-    
+
     // RoPE parameters
     ropeFreqBase: 0.0,
     ropeFreqScale: 0.0,
-    
+
     // YaRN parameters
     yarnExtFactor: -1.0,
     yarnAttnFactor: 1.0,
     yarnBetaFast: 32.0,
     yarnBetaSlow: 1.0,
     yarnOrigCtx: 0,
-    
+
     // Memory and optimization parameters
     defragThold: 0.0,
     flashAttn: false,
@@ -199,7 +200,7 @@ function App() {
     },
     {
       name: "Phi-2",
-      filename: "phi-2.gguf", 
+      filename: "phi-2.gguf",
       url: "https://huggingface.co/TheBloke/phi-2-GGUF/resolve/main/phi-2.Q4_K_M.gguf",
       size: "1706.4 MB",
       description: "Microsoft's Phi-2 model, good performance/size ratio"
@@ -207,7 +208,7 @@ function App() {
     {
       name: "Llama-2-7B-Chat",
       filename: "llama-2-7b-chat.gguf",
-      url: "https://huggingface.co/TheBloke/Llama-2-7B-Chat-GGUF/resolve/main/llama-2-7b-chat.Q4_K_M.gguf", 
+      url: "https://huggingface.co/TheBloke/Llama-2-7B-Chat-GGUF/resolve/main/llama-2-7b-chat.Q4_K_M.gguf",
       size: "4.37 GB",
       description: "Larger model, requires more RAM but better quality"
     },
@@ -215,7 +216,7 @@ function App() {
       name: "Mistral 7B Instruct",
       filename: "mistral-7b-instruct.gguf",
       url: "https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF/resolve/main/mistral-7b-instruct-v0.2.Q4_K_M.gguf",
-      size: "4.37 GB", 
+      size: "4.37 GB",
       description: "High quality instruction model"
     },
     {
@@ -230,7 +231,7 @@ function App() {
   // Function to extract model name from model info
   const getModelName = (modelInfo) => {
     if (!modelInfo) return null;
-    
+
     // Try to extract model name from the path
     const lines = modelInfo.split('\n');
     for (const line of lines) {
@@ -272,20 +273,20 @@ function App() {
     // Socket event handlers
     newSocket.on('stream-chunk', (data) => {
       console.log('Received stream chunk:', data);
-      
+
       // Reset the timeout on each chunk received
       if (streamingTimeoutRef.current) {
         clearTimeout(streamingTimeoutRef.current);
       }
-      
+
       // Set a timeout to handle cases where [DONE] is never received
       streamingTimeoutRef.current = setTimeout(() => {
         console.log('Streaming timeout reached, forcing completion');
         console.log('Timeout content:', currentStreamingContentRef.current);
-        
+
         // Capture the content before clearing
         const timeoutContent = currentStreamingContentRef.current;
-        
+
         setIsStreaming(false);
         setIsLoading(false);
         setMessages(prev => {
@@ -299,28 +300,28 @@ function App() {
         setStreamingContent('');
         currentStreamingContentRef.current = '';
       }, 15000); // Increased to 15 seconds to give more time
-      
+
       // Check if this is the completion signal with metrics
       if (data.text.startsWith('[DONE]')) {
         console.log('Received [DONE] signal, stopping streaming');
         console.log('Current isStreaming state before update:', isStreaming);
         console.log('Current isLoading state before update:', isLoading);
-        
+
         // Capture the final content BEFORE clearing the ref
         const finalContent = currentStreamingContentRef.current;
         console.log('Final streaming content:', finalContent);
-        
+
         // Clear the timeout since we received [DONE]
         if (streamingTimeoutRef.current) {
           clearTimeout(streamingTimeoutRef.current);
           streamingTimeoutRef.current = null;
         }
-        
+
         // Always force the states to false when [DONE] is received
         setIsStreaming(false);
         setIsLoading(false);
         console.log('Forced isStreaming and isLoading to false.');
-        
+
         // Parse metrics if available and valid
         const metricsPart = data.text.substring(6); // after '[DONE]'
         if (metricsPart && metricsPart.trim().startsWith('{')) {
@@ -358,27 +359,27 @@ function App() {
             return newMessages;
           });
         }
-        
+
         // Reset streaming content after updating the message
         currentStreamingContentRef.current = '';
         setStreamingContent('');
         return;
       }
-      
+
       // Update the current streaming content
       console.log('Received chunk:', JSON.stringify(data.text), '| Length:', data.text.length);
       console.log('Previous content:', JSON.stringify(currentStreamingContentRef.current));
       currentStreamingContentRef.current += data.text;
       console.log('Updated streaming content:', JSON.stringify(currentStreamingContentRef.current));
       console.log('---');
-      
+
       // Force immediate UI update with flushSync to bypass React batching
       flushSync(() => {
         setStreamingContent(currentStreamingContentRef.current);
-        
+
         setMessages(prev => {
           const newMessages = [...prev];
-          
+
           // Check if we need to create a new assistant message
           if (newMessages.length === 0 || newMessages[newMessages.length - 1].type !== 'assistant') {
             // Create new assistant message with the complete content so far
@@ -394,16 +395,16 @@ function App() {
             return [...newMessages, newMessage];
           } else {
             // Update the existing assistant message with the complete content
-            return newMessages.map((msg, index) => 
-              index === newMessages.length - 1 
+            return newMessages.map((msg, index) =>
+              index === newMessages.length - 1
                 ? {
-                    ...msg,
-                    content: currentStreamingContentRef.current,
-                    isStreaming: true,
-                    // Force new object reference to ensure re-render
-                    _updateTime: Date.now(),
-                    _updateCount: (msg._updateCount || 0) + 1
-                  }
+                  ...msg,
+                  content: currentStreamingContentRef.current,
+                  isStreaming: true,
+                  // Force new object reference to ensure re-render
+                  _updateTime: Date.now(),
+                  _updateCount: (msg._updateCount || 0) + 1
+                }
                 : msg
             );
           }
@@ -417,7 +418,7 @@ function App() {
         clearTimeout(streamingTimeoutRef.current);
         streamingTimeoutRef.current = null;
       }
-      
+
       setIsStreaming(false);
       setIsLoading(false);
       // Mark the last assistant message as not streaming if it exists
@@ -437,7 +438,7 @@ function App() {
         clearTimeout(streamingTimeoutRef.current);
         streamingTimeoutRef.current = null;
       }
-      
+
       setIsStreaming(false);
       setIsLoading(false);
       // Mark the last assistant message as not streaming if it exists
@@ -482,7 +483,7 @@ function App() {
       try {
         console.log('Checking server status...');
         const isRunning = await checkServerStatus();
-        
+
         if (!isRunning) {
           console.log('Server not running, attempting to start...');
           await startServer();
@@ -497,7 +498,7 @@ function App() {
         console.error('Server check/start error:', error);
       }
     };
-    
+
     const autoInitializeModel = async () => {
       if (isInitializingRef.current) {
         console.log('Initialization already in progress, skipping auto-initialization.');
@@ -535,7 +536,7 @@ function App() {
         isInitializingRef.current = false;
       }
     };
-    
+
     console.log('About to call checkAndStartServer()');
     checkAndStartServer();
     return () => {
@@ -567,7 +568,7 @@ function App() {
         console.log('Periodic check: Server not running, attempting restart...');
         await startServer();
       }
-    }, 5000);
+    }, 500000);
 
     return () => clearInterval(statusInterval);
   }, [serverStatus, showRetryButton]);
@@ -587,7 +588,7 @@ function App() {
       setShowRetryButton(false);
       setIsInitialized(response.data.initialized);
       setSystemInfo(response.data.systemInfo);
-      
+
       if (response.data.initialized) {
         const modelResponse = await axios.get(`${API_BASE}/api/model-info`);
         setModelInfo(modelResponse.data.info);
@@ -606,18 +607,18 @@ function App() {
     try {
       setServerStatus('starting');
       setShowRetryButton(false);
-      
+
       // Try to start the server via the helper
       const response = await axios.post('http://localhost:4000/start-server');
-      
+
       if (response.data.success) {
         // Wait for server to start
         let attempts = 0;
         const maxAttempts = 30; // 30 seconds timeout
-        
+
         while (attempts < maxAttempts) {
           await new Promise(resolve => setTimeout(resolve, 1000));
-          
+
           try {
             const healthCheck = await axios.get(`${API_BASE}/api/health`);
             if (healthCheck.status === 200) {
@@ -625,7 +626,7 @@ function App() {
               setServerConnected(true);
               setIsInitialized(healthCheck.data.initialized);
               setSystemInfo(healthCheck.data.systemInfo);
-              
+
               if (healthCheck.data.initialized) {
                 const modelResponse = await axios.get(`${API_BASE}/api/model-info`);
                 setModelInfo(modelResponse.data.info);
@@ -635,10 +636,10 @@ function App() {
           } catch (error) {
             // Server not ready yet
           }
-          
+
           attempts++;
         }
-        
+
         // Timeout
         setServerStatus('error');
         setShowRetryButton(true);
@@ -664,10 +665,10 @@ function App() {
     try {
       // Stop the server first
       await axios.post('http://localhost:4000/stop-server');
-      
+
       // Wait a moment for it to stop
       await new Promise(resolve => setTimeout(resolve, 1000));
-      
+
       // Start it again
       await startServer();
     } catch (error) {
@@ -699,7 +700,7 @@ function App() {
     try {
       setIsLoading(true);
       const response = await axios.post(`${API_BASE}/api/change-model`, { modelPath });
-      
+
       if (response.data.success) {
         setIsInitialized(true);
         setModelInfo(response.data.modelInfo);
@@ -741,13 +742,13 @@ function App() {
 
   const cancelDownload = async () => {
     if (!selectedModel) return;
-    
+
     try {
       // Send cancel request via WebSocket
       if (socket.current) {
         socket.current.emit('cancel-download', { filename: selectedModel.filename });
       }
-      
+
       // Also try HTTP endpoint as backup
       try {
         await axios.post(`${API_BASE}/api/cancel-download`, {
@@ -756,7 +757,7 @@ function App() {
       } catch (error) {
         console.log('HTTP cancel failed, WebSocket cancel should work');
       }
-      
+
     } catch (error) {
       console.error('Cancel download error:', error);
     }
@@ -764,17 +765,17 @@ function App() {
 
   const removeModel = async (model) => {
     if (!model || !model.filename) return;
-    
+
     // Confirm deletion
     if (!window.confirm(`Are you sure you want to remove "${model.name}"? This action cannot be undone.`)) {
       return;
     }
-    
+
     try {
       const response = await axios.delete(`${API_BASE}/api/remove-model`, {
         data: { filename: model.filename }
       });
-      
+
       if (response.data.success) {
         // Refresh the models list
         fetchAvailableModels();
@@ -817,7 +818,7 @@ function App() {
       setIsLoading(true);
       isInitializingRef.current = true; // Set flag to true
       const response = await axios.post(`${API_BASE}/api/initialize`, initConfig);
-      
+
       if (response.data.success) {
         setIsInitialized(true);
         setModelInfo(response.data.modelInfo);
@@ -940,7 +941,7 @@ function App() {
               </div>
               {serverConnected && (
                 <div className="server-controls">
-                  <button 
+                  <button
                     className="btn btn-secondary btn-small"
                     onClick={restartServer}
                     title="Restart LLM Server"
@@ -948,7 +949,7 @@ function App() {
                     <RotateCcw size={14} />
                     Restart
                   </button>
-                  <button 
+                  <button
                     className="btn btn-danger btn-small"
                     onClick={shutdownServer}
                     title="Shutdown LLM Server"
@@ -977,7 +978,7 @@ function App() {
                 <Bot size={48} />
                 <h2>Welcome to Local LLM Inference</h2>
                 <p>Initialize a model and start chatting with your local AI!</p>
-                
+
                 {/* Server Status Display */}
                 <div className="server-status">
                   {serverStatus === 'checking' && (
@@ -986,25 +987,25 @@ function App() {
                       <span>Checking server status...</span>
                     </div>
                   )}
-                  
+
                   {serverStatus === 'starting' && (
                     <div className="status-loading">
                       <div className="loading-spinner"></div>
                       <span>Starting server...</span>
                     </div>
                   )}
-                  
+
                   {serverStatus === 'running' && !isInitialized && (
                     <div className="status-loading">
                       <div className="loading-spinner"></div>
                       <span>Initializing model...</span>
                     </div>
                   )}
-                  
+
                   {serverStatus === 'error' && showRetryButton && (
                     <div className="status-error">
                       <span>Server connection failed</span>
-                      <button 
+                      <button
                         className="btn btn-primary"
                         onClick={retryServerStart}
                       >
@@ -1032,8 +1033,8 @@ function App() {
               </div>
             ) : (
               messages.map((message) => (
-                <div 
-                  key={message.id} 
+                <div
+                  key={message.id}
                   className={`message ${message.type} ${message.isError ? 'error' : ''} ${message.isStreaming ? 'streaming' : ''}`}
                 >
                   <div className="message-avatar">
@@ -1045,7 +1046,7 @@ function App() {
                         {message.content && message.content.trim() ? (
                           <ReactMarkdown>{message.content}</ReactMarkdown>
                         ) : (
-                          <p style={{color: 'red'}}>No content available (length: {message.content?.length || 0})</p>
+                          <p style={{ color: 'red' }}>No content available (length: {message.content?.length || 0})</p>
                         )}
                         {message.isStreaming && <span className="streaming-cursor">|</span>}
                         {message.metrics && <GenerationMetrics metrics={message.metrics} />}
@@ -1073,7 +1074,7 @@ function App() {
               />
               <div className="input-actions">
                 {isStreaming ? (
-                  <button 
+                  <button
                     className="btn btn-danger"
                     onClick={stopGeneration}
                     title="Stop generation"
@@ -1081,7 +1082,7 @@ function App() {
                     <Square size={16} />
                   </button>
                 ) : (
-                  <button 
+                  <button
                     className="btn btn-primary"
                     onClick={sendMessage}
                     disabled={!input.trim() || isLoading || !isInitialized}
@@ -1102,7 +1103,7 @@ function App() {
           <div className="modal">
             <div className="modal-header">
               <h2>Initialize Model</h2>
-              <button 
+              <button
                 className="btn-close"
                 onClick={() => setShowInit(false)}
               >
@@ -1115,7 +1116,7 @@ function App() {
                 <input
                   type="text"
                   value={initConfig.modelPath}
-                  onChange={(e) => setInitConfig(prev => ({...prev, modelPath: e.target.value}))}
+                  onChange={(e) => setInitConfig(prev => ({ ...prev, modelPath: e.target.value }))}
                   placeholder="/path/to/your/model.gguf"
                 />
               </div>
@@ -1125,7 +1126,7 @@ function App() {
                   <input
                     type="number"
                     value={initConfig.contextSize}
-                    onChange={(e) => setInitConfig(prev => ({...prev, contextSize: parseInt(e.target.value)}))}
+                    onChange={(e) => setInitConfig(prev => ({ ...prev, contextSize: parseInt(e.target.value) }))}
                   />
                 </div>
                 <div className="form-group">
@@ -1133,7 +1134,7 @@ function App() {
                   <input
                     type="number"
                     value={initConfig.threads}
-                    onChange={(e) => setInitConfig(prev => ({...prev, threads: parseInt(e.target.value)}))}
+                    onChange={(e) => setInitConfig(prev => ({ ...prev, threads: parseInt(e.target.value) }))}
                   />
                 </div>
               </div>
@@ -1144,7 +1145,7 @@ function App() {
                     type="number"
                     step="0.1"
                     value={initConfig.temperature}
-                    onChange={(e) => setInitConfig(prev => ({...prev, temperature: parseFloat(e.target.value)}))}
+                    onChange={(e) => setInitConfig(prev => ({ ...prev, temperature: parseFloat(e.target.value) }))}
                   />
                 </div>
                 <div className="form-group">
@@ -1153,19 +1154,19 @@ function App() {
                     type="number"
                     step="0.1"
                     value={initConfig.topP}
-                    onChange={(e) => setInitConfig(prev => ({...prev, topP: parseFloat(e.target.value)}))}
+                    onChange={(e) => setInitConfig(prev => ({ ...prev, topP: parseFloat(e.target.value) }))}
                   />
                 </div>
               </div>
             </div>
             <div className="modal-footer">
-              <button 
+              <button
                 className="btn btn-secondary"
                 onClick={() => setShowInit(false)}
               >
                 Cancel
               </button>
-              <button 
+              <button
                 className="btn btn-primary"
                 onClick={initializeModel}
                 disabled={isLoading || !initConfig.modelPath}
@@ -1183,7 +1184,7 @@ function App() {
           <div className="modal">
             <div className="modal-header">
               <h2>Settings</h2>
-              <button 
+              <button
                 className="btn-close"
                 onClick={() => setShowSettings(false)}
               >
@@ -1198,7 +1199,7 @@ function App() {
                     <pre>{modelInfo}</pre>
                   </div>
                 )}
-                
+
                 {systemInfo && (
                   <div className="info-section">
                     <h3>System Information</h3>
@@ -1206,14 +1207,14 @@ function App() {
                   </div>
                 )}
               </div>
-              
+
               {availableModels.length > 0 && (
                 <div className="model-selection-section">
                   <h3>Available Models</h3>
                   <div className="models-grid">
                     {availableModels.map((model) => (
-                      <div 
-                        key={model.path} 
+                      <div
+                        key={model.path}
                         className={`model-card ${modelInfo && modelInfo.includes(model.path) ? 'active' : ''}`}
                         onClick={() => changeModel(model.path)}
                       >
@@ -1225,7 +1226,7 @@ function App() {
                       </div>
                     ))}
                   </div>
-                  <button 
+                  <button
                     className="btn btn-secondary download-model-btn"
                     onClick={() => setShowModelDownload(true)}
                   >
@@ -1234,7 +1235,7 @@ function App() {
                   </button>
                 </div>
               )}
-              
+
               <div className="parameters-section">
                 <h3>Sampling Parameters</h3>
                 <div className="form-row">
@@ -1244,7 +1245,7 @@ function App() {
                       type="number"
                       step="0.1"
                       value={parameters.temperature}
-                      onChange={(e) => setParameters(prev => ({...prev, temperature: parseFloat(e.target.value)}))}
+                      onChange={(e) => setParameters(prev => ({ ...prev, temperature: parseFloat(e.target.value) }))}
                     />
                   </div>
                   <div className="form-group">
@@ -1253,7 +1254,7 @@ function App() {
                       type="number"
                       step="0.1"
                       value={parameters.topP}
-                      onChange={(e) => setParameters(prev => ({...prev, topP: parseFloat(e.target.value)}))}
+                      onChange={(e) => setParameters(prev => ({ ...prev, topP: parseFloat(e.target.value) }))}
                     />
                   </div>
                 </div>
@@ -1263,7 +1264,7 @@ function App() {
                     <input
                       type="number"
                       value={parameters.topK}
-                      onChange={(e) => setParameters(prev => ({...prev, topK: parseInt(e.target.value)}))}
+                      onChange={(e) => setParameters(prev => ({ ...prev, topK: parseInt(e.target.value) }))}
                     />
                   </div>
                   <div className="form-group">
@@ -1272,7 +1273,7 @@ function App() {
                       type="number"
                       step="0.1"
                       value={parameters.minP}
-                      onChange={(e) => setParameters(prev => ({...prev, minP: parseFloat(e.target.value)}))}
+                      onChange={(e) => setParameters(prev => ({ ...prev, minP: parseFloat(e.target.value) }))}
                     />
                   </div>
                 </div>
@@ -1283,7 +1284,7 @@ function App() {
                       type="number"
                       step="0.1"
                       value={parameters.typicalP}
-                      onChange={(e) => setParameters(prev => ({...prev, typicalP: parseFloat(e.target.value)}))}
+                      onChange={(e) => setParameters(prev => ({ ...prev, typicalP: parseFloat(e.target.value) }))}
                     />
                   </div>
                   <div className="form-group">
@@ -1292,7 +1293,7 @@ function App() {
                       type="number"
                       step="0.1"
                       value={parameters.tfsZ}
-                      onChange={(e) => setParameters(prev => ({...prev, tfsZ: parseFloat(e.target.value)}))}
+                      onChange={(e) => setParameters(prev => ({ ...prev, tfsZ: parseFloat(e.target.value) }))}
                     />
                   </div>
                 </div>
@@ -1303,7 +1304,7 @@ function App() {
                       type="number"
                       step="0.1"
                       value={parameters.topA}
-                      onChange={(e) => setParameters(prev => ({...prev, topA: parseFloat(e.target.value)}))}
+                      onChange={(e) => setParameters(prev => ({ ...prev, topA: parseFloat(e.target.value) }))}
                     />
                   </div>
                 </div>
@@ -1318,7 +1319,7 @@ function App() {
                       type="number"
                       step="0.1"
                       value={parameters.repeatPenalty}
-                      onChange={(e) => setParameters(prev => ({...prev, repeatPenalty: parseFloat(e.target.value)}))}
+                      onChange={(e) => setParameters(prev => ({ ...prev, repeatPenalty: parseFloat(e.target.value) }))}
                     />
                   </div>
                   <div className="form-group">
@@ -1326,7 +1327,7 @@ function App() {
                     <input
                       type="number"
                       value={parameters.repeatPenaltyLastN}
-                      onChange={(e) => setParameters(prev => ({...prev, repeatPenaltyLastN: parseInt(e.target.value)}))}
+                      onChange={(e) => setParameters(prev => ({ ...prev, repeatPenaltyLastN: parseInt(e.target.value) }))}
                     />
                   </div>
                 </div>
@@ -1337,7 +1338,7 @@ function App() {
                       type="number"
                       step="0.1"
                       value={parameters.frequencyPenalty}
-                      onChange={(e) => setParameters(prev => ({...prev, frequencyPenalty: parseFloat(e.target.value)}))}
+                      onChange={(e) => setParameters(prev => ({ ...prev, frequencyPenalty: parseFloat(e.target.value) }))}
                     />
                   </div>
                   <div className="form-group">
@@ -1346,7 +1347,7 @@ function App() {
                       type="number"
                       step="0.1"
                       value={parameters.presencePenalty}
-                      onChange={(e) => setParameters(prev => ({...prev, presencePenalty: parseFloat(e.target.value)}))}
+                      onChange={(e) => setParameters(prev => ({ ...prev, presencePenalty: parseFloat(e.target.value) }))}
                     />
                   </div>
                 </div>
@@ -1361,7 +1362,7 @@ function App() {
                       type="number"
                       step="0.1"
                       value={parameters.mirostatTau}
-                      onChange={(e) => setParameters(prev => ({...prev, mirostatTau: parseFloat(e.target.value)}))}
+                      onChange={(e) => setParameters(prev => ({ ...prev, mirostatTau: parseFloat(e.target.value) }))}
                     />
                   </div>
                   <div className="form-group">
@@ -1370,7 +1371,7 @@ function App() {
                       type="number"
                       step="0.1"
                       value={parameters.mirostatEta}
-                      onChange={(e) => setParameters(prev => ({...prev, mirostatEta: parseFloat(e.target.value)}))}
+                      onChange={(e) => setParameters(prev => ({ ...prev, mirostatEta: parseFloat(e.target.value) }))}
                     />
                   </div>
                 </div>
@@ -1380,7 +1381,7 @@ function App() {
                     <input
                       type="number"
                       value={parameters.mirostatM}
-                      onChange={(e) => setParameters(prev => ({...prev, mirostatM: parseInt(e.target.value)}))}
+                      onChange={(e) => setParameters(prev => ({ ...prev, mirostatM: parseInt(e.target.value) }))}
                     />
                   </div>
                 </div>
@@ -1395,7 +1396,7 @@ function App() {
                       type="number"
                       step="0.1"
                       value={parameters.ropeFreqBase}
-                      onChange={(e) => setParameters(prev => ({...prev, ropeFreqBase: parseFloat(e.target.value)}))}
+                      onChange={(e) => setParameters(prev => ({ ...prev, ropeFreqBase: parseFloat(e.target.value) }))}
                     />
                   </div>
                   <div className="form-group">
@@ -1404,7 +1405,7 @@ function App() {
                       type="number"
                       step="0.1"
                       value={parameters.ropeFreqScale}
-                      onChange={(e) => setParameters(prev => ({...prev, ropeFreqScale: parseFloat(e.target.value)}))}
+                      onChange={(e) => setParameters(prev => ({ ...prev, ropeFreqScale: parseFloat(e.target.value) }))}
                     />
                   </div>
                 </div>
@@ -1419,7 +1420,7 @@ function App() {
                       type="number"
                       step="0.1"
                       value={parameters.yarnExtFactor}
-                      onChange={(e) => setParameters(prev => ({...prev, yarnExtFactor: parseFloat(e.target.value)}))}
+                      onChange={(e) => setParameters(prev => ({ ...prev, yarnExtFactor: parseFloat(e.target.value) }))}
                     />
                   </div>
                   <div className="form-group">
@@ -1428,7 +1429,7 @@ function App() {
                       type="number"
                       step="0.1"
                       value={parameters.yarnAttnFactor}
-                      onChange={(e) => setParameters(prev => ({...prev, yarnAttnFactor: parseFloat(e.target.value)}))}
+                      onChange={(e) => setParameters(prev => ({ ...prev, yarnAttnFactor: parseFloat(e.target.value) }))}
                     />
                   </div>
                 </div>
@@ -1439,7 +1440,7 @@ function App() {
                       type="number"
                       step="0.1"
                       value={parameters.yarnBetaFast}
-                      onChange={(e) => setParameters(prev => ({...prev, yarnBetaFast: parseFloat(e.target.value)}))}
+                      onChange={(e) => setParameters(prev => ({ ...prev, yarnBetaFast: parseFloat(e.target.value) }))}
                     />
                   </div>
                   <div className="form-group">
@@ -1448,7 +1449,7 @@ function App() {
                       type="number"
                       step="0.1"
                       value={parameters.yarnBetaSlow}
-                      onChange={(e) => setParameters(prev => ({...prev, yarnBetaSlow: parseFloat(e.target.value)}))}
+                      onChange={(e) => setParameters(prev => ({ ...prev, yarnBetaSlow: parseFloat(e.target.value) }))}
                     />
                   </div>
                 </div>
@@ -1458,7 +1459,7 @@ function App() {
                     <input
                       type="number"
                       value={parameters.yarnOrigCtx}
-                      onChange={(e) => setParameters(prev => ({...prev, yarnOrigCtx: parseInt(e.target.value)}))}
+                      onChange={(e) => setParameters(prev => ({ ...prev, yarnOrigCtx: parseInt(e.target.value) }))}
                     />
                   </div>
                 </div>
@@ -1473,7 +1474,7 @@ function App() {
                       type="number"
                       step="0.1"
                       value={parameters.defragThold}
-                      onChange={(e) => setParameters(prev => ({...prev, defragThold: parseFloat(e.target.value)}))}
+                      onChange={(e) => setParameters(prev => ({ ...prev, defragThold: parseFloat(e.target.value) }))}
                     />
                   </div>
                   <div className="form-group">
@@ -1481,7 +1482,7 @@ function App() {
                     <input
                       type="number"
                       value={parameters.threadsBatch}
-                      onChange={(e) => setParameters(prev => ({...prev, threadsBatch: parseInt(e.target.value)}))}
+                      onChange={(e) => setParameters(prev => ({ ...prev, threadsBatch: parseInt(e.target.value) }))}
                     />
                   </div>
                 </div>
@@ -1491,7 +1492,7 @@ function App() {
                     <input
                       type="number"
                       value={parameters.ubatchSize}
-                      onChange={(e) => setParameters(prev => ({...prev, ubatchSize: parseInt(e.target.value)}))}
+                      onChange={(e) => setParameters(prev => ({ ...prev, ubatchSize: parseInt(e.target.value) }))}
                     />
                   </div>
                 </div>
@@ -1501,7 +1502,7 @@ function App() {
                       <input
                         type="checkbox"
                         checked={parameters.flashAttn}
-                        onChange={(e) => setParameters(prev => ({...prev, flashAttn: e.target.checked}))}
+                        onChange={(e) => setParameters(prev => ({ ...prev, flashAttn: e.target.checked }))}
                       />
                       Flash Attention
                     </label>
@@ -1511,7 +1512,7 @@ function App() {
                       <input
                         type="checkbox"
                         checked={parameters.offloadKqv}
-                        onChange={(e) => setParameters(prev => ({...prev, offloadKqv: e.target.checked}))}
+                        onChange={(e) => setParameters(prev => ({ ...prev, offloadKqv: e.target.checked }))}
                       />
                       Offload KQV
                     </label>
@@ -1523,7 +1524,7 @@ function App() {
                       <input
                         type="checkbox"
                         checked={parameters.embeddings}
-                        onChange={(e) => setParameters(prev => ({...prev, embeddings: e.target.checked}))}
+                        onChange={(e) => setParameters(prev => ({ ...prev, embeddings: e.target.checked }))}
                       />
                       Extract Embeddings
                     </label>
@@ -1532,13 +1533,13 @@ function App() {
               </div>
             </div>
             <div className="modal-footer">
-              <button 
+              <button
                 className="btn btn-secondary"
                 onClick={() => setShowSettings(false)}
               >
                 Cancel
               </button>
-              <button 
+              <button
                 className="btn btn-primary"
                 onClick={updateParameters}
               >
@@ -1555,7 +1556,7 @@ function App() {
           <div className="modal">
             <div className="modal-header">
               <h2>Download New Model</h2>
-              <button 
+              <button
                 className="btn-close"
                 onClick={() => setShowModelDownload(false)}
               >
@@ -1565,13 +1566,13 @@ function App() {
             <div className="modal-content">
               <div className="models-download-grid">
                 {supportedModels.map((model) => {
-                  const isDownloaded = availableModels.some(available => 
+                  const isDownloaded = availableModels.some(available =>
                     available.name === model.filename
                   );
-                  
+
                   return (
-                    <div 
-                      key={model.filename} 
+                    <div
+                      key={model.filename}
                       className={`download-model-card ${isDownloaded ? 'downloaded' : ''}`}
                       onClick={!isDownloaded ? () => startModelDownload(model) : undefined}
                     >
@@ -1581,7 +1582,7 @@ function App() {
                       {isDownloaded && (
                         <>
                           <div className="downloaded-indicator">Already in Model DB</div>
-                          <button 
+                          <button
                             className="btn btn-danger btn-remove-model"
                             onClick={(e) => {
                               e.stopPropagation();
@@ -1599,7 +1600,7 @@ function App() {
               </div>
             </div>
             <div className="modal-footer">
-              <button 
+              <button
                 className="btn btn-secondary"
                 onClick={() => setShowModelDownload(false)}
               >
@@ -1626,8 +1627,8 @@ function App() {
               )}
               <div className="download-progress">
                 <div className="progress-bar">
-                  <div 
-                    className="progress-fill" 
+                  <div
+                    className="progress-fill"
                     style={{ width: `${downloadProgress.progress || 0}%` }}
                   ></div>
                 </div>
@@ -1652,7 +1653,7 @@ function App() {
               </div>
             </div>
             <div className="modal-footer">
-              <button 
+              <button
                 className="btn btn-danger"
                 onClick={cancelDownload}
                 disabled={downloadProgress.status?.includes('complete') || downloadProgress.status?.includes('cancelled') || downloadProgress.status?.includes('Error')}
