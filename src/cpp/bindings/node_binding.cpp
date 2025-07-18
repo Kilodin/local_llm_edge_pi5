@@ -24,7 +24,30 @@ public:
             InstanceMethod("setTemperature", &LLMNodeBinding::SetTemperature),
             InstanceMethod("setTopP", &LLMNodeBinding::SetTopP),
             InstanceMethod("setTopK", &LLMNodeBinding::SetTopK),
+            InstanceMethod("setMinP", &LLMNodeBinding::SetMinP),
+            InstanceMethod("setTypicalP", &LLMNodeBinding::SetTypicalP),
+            InstanceMethod("setTfsZ", &LLMNodeBinding::SetTfsZ),
+            InstanceMethod("setTopA", &LLMNodeBinding::SetTopA),
             InstanceMethod("setRepeatPenalty", &LLMNodeBinding::SetRepeatPenalty),
+            InstanceMethod("setRepeatPenaltyLastN", &LLMNodeBinding::SetRepeatPenaltyLastN),
+            InstanceMethod("setFrequencyPenalty", &LLMNodeBinding::SetFrequencyPenalty),
+            InstanceMethod("setPresencePenalty", &LLMNodeBinding::SetPresencePenalty),
+            InstanceMethod("setMirostatTau", &LLMNodeBinding::SetMirostatTau),
+            InstanceMethod("setMirostatEta", &LLMNodeBinding::SetMirostatEta),
+            InstanceMethod("setMirostatM", &LLMNodeBinding::SetMirostatM),
+            InstanceMethod("setRopeFreqBase", &LLMNodeBinding::SetRopeFreqBase),
+            InstanceMethod("setRopeFreqScale", &LLMNodeBinding::SetRopeFreqScale),
+            InstanceMethod("setYarnExtFactor", &LLMNodeBinding::SetYarnExtFactor),
+            InstanceMethod("setYarnAttnFactor", &LLMNodeBinding::SetYarnAttnFactor),
+            InstanceMethod("setYarnBetaFast", &LLMNodeBinding::SetYarnBetaFast),
+            InstanceMethod("setYarnBetaSlow", &LLMNodeBinding::SetYarnBetaSlow),
+            InstanceMethod("setYarnOrigCtx", &LLMNodeBinding::SetYarnOrigCtx),
+            InstanceMethod("setDefragThold", &LLMNodeBinding::SetDefragThold),
+            InstanceMethod("setFlashAttn", &LLMNodeBinding::SetFlashAttn),
+            InstanceMethod("setOffloadKqv", &LLMNodeBinding::SetOffloadKqv),
+            InstanceMethod("setEmbeddings", &LLMNodeBinding::SetEmbeddings),
+            InstanceMethod("setThreadsBatch", &LLMNodeBinding::SetThreadsBatch),
+            InstanceMethod("setUbatchSize", &LLMNodeBinding::SetUbatchSize),
             InstanceMethod("stopGeneration", &LLMNodeBinding::StopGeneration),
             StaticMethod("getSystemInfo", &LLMNodeBinding::GetSystemInfo)
         });
@@ -157,24 +180,47 @@ public:
             callback_tsfn_initialized_ = false;
         }
 
-        // Create thread-safe function for callback
+        // Create thread-safe function for callback with larger queue and better error handling
         callback_tsfn_ = Napi::ThreadSafeFunction::New(
             env,
             callback,
             "LLMStreamCallback",
-            0,
+            2000,  // max_queue_size = 2000 (allow more queued callbacks)
             1
         );
         callback_tsfn_initialized_ = true;
 
         // Start generation in worker thread
         worker_thread_ = std::thread([this, prompt, max_tokens]() {
+            std::cerr << "[LLMNodeBinding] Starting generation thread for prompt: '" << prompt << "'" << std::endl;
             engine_->generate_text_stream(prompt, [this](const std::string& text) {
+                std::cerr << "[LLMNodeBinding] Received text from engine: '" << text << "' (length: " << text.length() << ")" << std::endl;
                 auto callback = [text](Napi::Env env, Napi::Function js_callback) {
-                    js_callback.Call({Napi::String::New(env, text)});
+                    try {
+                        std::cerr << "[LLMNodeBinding] Executing JS callback with text: '" << text << "'" << std::endl;
+                        js_callback.Call({Napi::String::New(env, text)});
+                        std::cerr << "[LLMNodeBinding] JS callback completed successfully" << std::endl;
+                    } catch (const std::exception& e) {
+                        std::cerr << "[LLMNodeBinding] Exception in callback: " << e.what() << std::endl;
+                    }
                 };
-                callback_tsfn_.BlockingCall(callback);
+                
+                // Try NonBlockingCall first, fall back to BlockingCall if queue is full
+                napi_status status = callback_tsfn_.NonBlockingCall(callback);
+                if (status != napi_ok) {
+                    std::cerr << "[LLMNodeBinding] NonBlockingCall failed with status " << status 
+                              << ", trying BlockingCall for text: '" << text << "'" << std::endl;
+                    
+                    // Fall back to blocking call if non-blocking fails
+                    status = callback_tsfn_.BlockingCall(callback);
+                    if (status != napi_ok) {
+                        std::cerr << "[LLMNodeBinding] BlockingCall also failed with status " << status << std::endl;
+                    }
+                } else {
+                    std::cerr << "[LLMNodeBinding] Successfully queued callback for text: '" << text << "'" << std::endl;
+                }
             }, max_tokens);
+            std::cerr << "[LLMNodeBinding] Generation thread completed" << std::endl;
         });
 
         return env.Undefined();
@@ -246,6 +292,259 @@ public:
 
         float penalty = info[0].As<Napi::Number>().FloatValue();
         engine_->set_repeat_penalty(penalty);
+        return env.Undefined();
+    }
+
+    Napi::Value SetMinP(const Napi::CallbackInfo& info) {
+        Napi::Env env = info.Env();
+        if (info.Length() < 1 || !info[0].IsNumber()) {
+            Napi::TypeError::New(env, "Expected number argument").ThrowAsJavaScriptException();
+            return env.Null();
+        }
+        float min_p = info[0].As<Napi::Number>().FloatValue();
+        engine_->set_min_p(min_p);
+        return env.Undefined();
+    }
+
+    Napi::Value SetTypicalP(const Napi::CallbackInfo& info) {
+        Napi::Env env = info.Env();
+        if (info.Length() < 1 || !info[0].IsNumber()) {
+            Napi::TypeError::New(env, "Expected number argument").ThrowAsJavaScriptException();
+            return env.Null();
+        }
+        float typical_p = info[0].As<Napi::Number>().FloatValue();
+        engine_->set_typical_p(typical_p);
+        return env.Undefined();
+    }
+
+    Napi::Value SetTfsZ(const Napi::CallbackInfo& info) {
+        Napi::Env env = info.Env();
+        if (info.Length() < 1 || !info[0].IsNumber()) {
+            Napi::TypeError::New(env, "Expected number argument").ThrowAsJavaScriptException();
+            return env.Null();
+        }
+        float tfs_z = info[0].As<Napi::Number>().FloatValue();
+        engine_->set_tfs_z(tfs_z);
+        return env.Undefined();
+    }
+
+    Napi::Value SetTopA(const Napi::CallbackInfo& info) {
+        Napi::Env env = info.Env();
+        if (info.Length() < 1 || !info[0].IsNumber()) {
+            Napi::TypeError::New(env, "Expected number argument").ThrowAsJavaScriptException();
+            return env.Null();
+        }
+        float top_a = info[0].As<Napi::Number>().FloatValue();
+        engine_->set_top_a(top_a);
+        return env.Undefined();
+    }
+
+    Napi::Value SetRepeatPenaltyLastN(const Napi::CallbackInfo& info) {
+        Napi::Env env = info.Env();
+        if (info.Length() < 1 || !info[0].IsNumber()) {
+            Napi::TypeError::New(env, "Expected number argument").ThrowAsJavaScriptException();
+            return env.Null();
+        }
+        int last_n = info[0].As<Napi::Number>().Int32Value();
+        engine_->set_repeat_penalty_last_n(last_n);
+        return env.Undefined();
+    }
+
+    Napi::Value SetFrequencyPenalty(const Napi::CallbackInfo& info) {
+        Napi::Env env = info.Env();
+        if (info.Length() < 1 || !info[0].IsNumber()) {
+            Napi::TypeError::New(env, "Expected number argument").ThrowAsJavaScriptException();
+            return env.Null();
+        }
+        float penalty = info[0].As<Napi::Number>().FloatValue();
+        engine_->set_frequency_penalty(penalty);
+        return env.Undefined();
+    }
+
+    Napi::Value SetPresencePenalty(const Napi::CallbackInfo& info) {
+        Napi::Env env = info.Env();
+        if (info.Length() < 1 || !info[0].IsNumber()) {
+            Napi::TypeError::New(env, "Expected number argument").ThrowAsJavaScriptException();
+            return env.Null();
+        }
+        float penalty = info[0].As<Napi::Number>().FloatValue();
+        engine_->set_presence_penalty(penalty);
+        return env.Undefined();
+    }
+
+    Napi::Value SetMirostatTau(const Napi::CallbackInfo& info) {
+        Napi::Env env = info.Env();
+        if (info.Length() < 1 || !info[0].IsNumber()) {
+            Napi::TypeError::New(env, "Expected number argument").ThrowAsJavaScriptException();
+            return env.Null();
+        }
+        float tau = info[0].As<Napi::Number>().FloatValue();
+        engine_->set_mirostat_tau(tau);
+        return env.Undefined();
+    }
+
+    Napi::Value SetMirostatEta(const Napi::CallbackInfo& info) {
+        Napi::Env env = info.Env();
+        if (info.Length() < 1 || !info[0].IsNumber()) {
+            Napi::TypeError::New(env, "Expected number argument").ThrowAsJavaScriptException();
+            return env.Null();
+        }
+        float eta = info[0].As<Napi::Number>().FloatValue();
+        engine_->set_mirostat_eta(eta);
+        return env.Undefined();
+    }
+
+    Napi::Value SetMirostatM(const Napi::CallbackInfo& info) {
+        Napi::Env env = info.Env();
+        if (info.Length() < 1 || !info[0].IsNumber()) {
+            Napi::TypeError::New(env, "Expected number argument").ThrowAsJavaScriptException();
+            return env.Null();
+        }
+        int m = info[0].As<Napi::Number>().Int32Value();
+        engine_->set_mirostat_m(m);
+        return env.Undefined();
+    }
+
+    Napi::Value SetRopeFreqBase(const Napi::CallbackInfo& info) {
+        Napi::Env env = info.Env();
+        if (info.Length() < 1 || !info[0].IsNumber()) {
+            Napi::TypeError::New(env, "Expected number argument").ThrowAsJavaScriptException();
+            return env.Null();
+        }
+        float freq_base = info[0].As<Napi::Number>().FloatValue();
+        engine_->set_rope_freq_base(freq_base);
+        return env.Undefined();
+    }
+
+    Napi::Value SetRopeFreqScale(const Napi::CallbackInfo& info) {
+        Napi::Env env = info.Env();
+        if (info.Length() < 1 || !info[0].IsNumber()) {
+            Napi::TypeError::New(env, "Expected number argument").ThrowAsJavaScriptException();
+            return env.Null();
+        }
+        float freq_scale = info[0].As<Napi::Number>().FloatValue();
+        engine_->set_rope_freq_scale(freq_scale);
+        return env.Undefined();
+    }
+
+    Napi::Value SetYarnExtFactor(const Napi::CallbackInfo& info) {
+        Napi::Env env = info.Env();
+        if (info.Length() < 1 || !info[0].IsNumber()) {
+            Napi::TypeError::New(env, "Expected number argument").ThrowAsJavaScriptException();
+            return env.Null();
+        }
+        float factor = info[0].As<Napi::Number>().FloatValue();
+        engine_->set_yarn_ext_factor(factor);
+        return env.Undefined();
+    }
+
+    Napi::Value SetYarnAttnFactor(const Napi::CallbackInfo& info) {
+        Napi::Env env = info.Env();
+        if (info.Length() < 1 || !info[0].IsNumber()) {
+            Napi::TypeError::New(env, "Expected number argument").ThrowAsJavaScriptException();
+            return env.Null();
+        }
+        float factor = info[0].As<Napi::Number>().FloatValue();
+        engine_->set_yarn_attn_factor(factor);
+        return env.Undefined();
+    }
+
+    Napi::Value SetYarnBetaFast(const Napi::CallbackInfo& info) {
+        Napi::Env env = info.Env();
+        if (info.Length() < 1 || !info[0].IsNumber()) {
+            Napi::TypeError::New(env, "Expected number argument").ThrowAsJavaScriptException();
+            return env.Null();
+        }
+        float beta = info[0].As<Napi::Number>().FloatValue();
+        engine_->set_yarn_beta_fast(beta);
+        return env.Undefined();
+    }
+
+    Napi::Value SetYarnBetaSlow(const Napi::CallbackInfo& info) {
+        Napi::Env env = info.Env();
+        if (info.Length() < 1 || !info[0].IsNumber()) {
+            Napi::TypeError::New(env, "Expected number argument").ThrowAsJavaScriptException();
+            return env.Null();
+        }
+        float beta = info[0].As<Napi::Number>().FloatValue();
+        engine_->set_yarn_beta_slow(beta);
+        return env.Undefined();
+    }
+
+    Napi::Value SetYarnOrigCtx(const Napi::CallbackInfo& info) {
+        Napi::Env env = info.Env();
+        if (info.Length() < 1 || !info[0].IsNumber()) {
+            Napi::TypeError::New(env, "Expected number argument").ThrowAsJavaScriptException();
+            return env.Null();
+        }
+        uint32_t ctx = info[0].As<Napi::Number>().Uint32Value();
+        engine_->set_yarn_orig_ctx(ctx);
+        return env.Undefined();
+    }
+
+    Napi::Value SetDefragThold(const Napi::CallbackInfo& info) {
+        Napi::Env env = info.Env();
+        if (info.Length() < 1 || !info[0].IsNumber()) {
+            Napi::TypeError::New(env, "Expected number argument").ThrowAsJavaScriptException();
+            return env.Null();
+        }
+        float thold = info[0].As<Napi::Number>().FloatValue();
+        engine_->set_defrag_thold(thold);
+        return env.Undefined();
+    }
+
+    Napi::Value SetFlashAttn(const Napi::CallbackInfo& info) {
+        Napi::Env env = info.Env();
+        if (info.Length() < 1 || !info[0].IsBoolean()) {
+            Napi::TypeError::New(env, "Expected boolean argument").ThrowAsJavaScriptException();
+            return env.Null();
+        }
+        bool enabled = info[0].As<Napi::Boolean>().Value();
+        engine_->set_flash_attn(enabled);
+        return env.Undefined();
+    }
+
+    Napi::Value SetOffloadKqv(const Napi::CallbackInfo& info) {
+        Napi::Env env = info.Env();
+        if (info.Length() < 1 || !info[0].IsBoolean()) {
+            Napi::TypeError::New(env, "Expected boolean argument").ThrowAsJavaScriptException();
+            return env.Null();
+        }
+        bool enabled = info[0].As<Napi::Boolean>().Value();
+        engine_->set_offload_kqv(enabled);
+        return env.Undefined();
+    }
+
+    Napi::Value SetEmbeddings(const Napi::CallbackInfo& info) {
+        Napi::Env env = info.Env();
+        if (info.Length() < 1 || !info[0].IsBoolean()) {
+            Napi::TypeError::New(env, "Expected boolean argument").ThrowAsJavaScriptException();
+            return env.Null();
+        }
+        bool enabled = info[0].As<Napi::Boolean>().Value();
+        engine_->set_embeddings(enabled);
+        return env.Undefined();
+    }
+
+    Napi::Value SetThreadsBatch(const Napi::CallbackInfo& info) {
+        Napi::Env env = info.Env();
+        if (info.Length() < 1 || !info[0].IsNumber()) {
+            Napi::TypeError::New(env, "Expected number argument").ThrowAsJavaScriptException();
+            return env.Null();
+        }
+        int threads = info[0].As<Napi::Number>().Int32Value();
+        engine_->set_threads_batch(threads);
+        return env.Undefined();
+    }
+
+    Napi::Value SetUbatchSize(const Napi::CallbackInfo& info) {
+        Napi::Env env = info.Env();
+        if (info.Length() < 1 || !info[0].IsNumber()) {
+            Napi::TypeError::New(env, "Expected number argument").ThrowAsJavaScriptException();
+            return env.Null();
+        }
+        int size = info[0].As<Napi::Number>().Int32Value();
+        engine_->set_ubatch_size(size);
         return env.Undefined();
     }
 

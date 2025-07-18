@@ -12,6 +12,8 @@
     "dev:ui": "cd src/ui && npm start",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:ui\"",
     "start": "LD_LIBRARY_PATH=$(pwd)/third_party/llama.cpp/build/bin:$(pwd)/build/Release node src/server/index.js",
+    "start:helper": "node server-helper.js",
+    "start:with-helper": "concurrently \"npm run start:helper\" \"npm run start\"",
     "test": "LD_LIBRARY_PATH=$(pwd)/third_party/llama.cpp/build/bin:$(pwd)/build/Release node test/test.js",
     "cli": "LD_LIBRARY_PATH=$(pwd)/third_party/llama.cpp/build/bin:$(pwd)/build/Release node src/cli/index.js"
   },

@@ -90,13 +90,29 @@ wget -O models/llama-2-7b-chat.Q4_K_M.gguf \
 
 ### Web Interface
 
-Start the server with web UI:
-
+**Recommended: Automatic Startup**
 ```bash
-npm start
+./start-app.sh
 ```
 
-Open your browser to `http://localhost:3001`
+This will automatically:
+- Start the server helper on port 4000
+- Start the React UI on port 3000
+- Automatically attempt to start the LLM server when the page loads
+- Show a retry button if the server fails to start
+
+**Alternative: Manual Startup**
+```bash
+# Start server helper
+npm run start:helper
+
+# In another terminal, start the React UI
+cd src/ui && npm start
+```
+
+Open your browser to `http://localhost:3000`
+
+The app will automatically attempt to start the LLM server when the page loads. If it fails, you'll see a "Retry Connection" button.
 
 ### Command Line Interface
 
@@ -237,27 +253,38 @@ node --inspect src/server/index.js
 
 ### Common Issues
 
-1. **Build Failures**
+1. **Server Won't Start (Port Already in Use)**
+   ```bash
+   # Use the clean start script
+   ./clean-start.sh
+   
+   # Or manually clean up processes
+   pkill -f server-helper.js
+   pkill -f "src/server/index.js"
+   pkill -f "react-scripts start"
+   ```
+
+2. **Build Failures**
    ```bash
    # Ensure all dependencies are installed
    sudo apt install build-essential cmake
    npm install
    ```
 
-2. **Model Loading Errors**
+3. **Model Loading Errors**
    ```bash
    # Check model file exists and is valid
    ls -la models/
    file models/your-model.gguf
    ```
 
-3. **Memory Issues**
+4. **Memory Issues**
    ```bash
    # Reduce context size and batch size
    npm run cli init -m ./model.gguf -c 512 -b 128
    ```
 
-4. **Performance Issues**
+5. **Performance Issues**
    ```bash
    # Monitor system resources
    htop
