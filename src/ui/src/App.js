@@ -185,7 +185,7 @@ function App() {
   });
 
   // System prompt for controlling model personality
-  const [systemPrompt, setSystemPrompt] = useState('You are a helpful AI assistant.');
+  const [systemPrompt, setSystemPrompt] = useState('You are a helpful AI assistant that answers clearly and professionally about any queries the user sends you. Do not make up any information if you do not know something. Please format the response in a clear and consise manner.');
   const messagesEndRef = useRef(null);
   // Add a dummy state for forced re-render
   const [forceRender, setForceRender] = useState(0);

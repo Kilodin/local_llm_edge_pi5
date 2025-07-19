@@ -31,7 +31,6 @@ class LLMServer {
     setupMiddleware() {
         this.app.use(cors());
         this.app.use(express.json());
-        this.app.use(express.static(path.join(process.cwd(), 'src/ui/build')));
     }
     
     setupRoutes() {
@@ -93,7 +92,7 @@ class LLMServer {
                     return res.status(400).json({ error: 'Model not initialized' });
                 }
                 
-                const { prompt, maxTokens = 256 } = req.body;
+                const { prompt, maxTokens = 512 } = req.body;
                 
                 if (!prompt) {
                     return res.status(400).json({ error: 'prompt is required' });
@@ -395,7 +394,7 @@ class LLMServer {
                         return;
                     }
                     
-                    const { prompt, systemPrompt, maxTokens = 128 } = data;
+                    const { prompt, systemPrompt, maxTokens = 512 } = data;
                     
                     console.log('Received generation request:');
                     console.log('User prompt:', prompt);
@@ -619,7 +618,6 @@ class LLMServer {
         this.server.listen(port, () => {
             console.log(`🚀 LLM Server running on port ${port}`);
             console.log(`📊 System Info: ${LLMNodeBinding.getSystemInfo()}`);
-            console.log(`🌐 Web UI available at http://localhost:${port}`);
         });
     }
 }
