@@ -387,12 +387,20 @@ class LLMServer {
             // Handle streaming generation
             socket.on('generate-stream', async (data) => {
                 try {
+                    console.log('=== GENERATION REQUEST RECEIVED ===');
+                    console.log('Raw data received:', JSON.stringify(data, null, 2));
+                    
                     if (!this.isInitialized) {
                         socket.emit('stream-error', { error: 'Model not initialized' });
                         return;
                     }
                     
-                    const { prompt, systemPrompt, maxTokens = 256 } = data;
+                    const { prompt, systemPrompt, maxTokens = 128 } = data;
+                    
+                    console.log('Received generation request:');
+                    console.log('User prompt:', prompt);
+                    console.log('System prompt:', systemPrompt || 'None');
+                    console.log('Max tokens:', maxTokens);
                     
                     if (!prompt) {
                         socket.emit('stream-error', { error: 'prompt is required' });
@@ -402,8 +410,16 @@ class LLMServer {
                     // Combine system prompt with user prompt if provided
                     let fullPrompt = prompt;
                     if (systemPrompt && systemPrompt.trim()) {
-                        fullPrompt = `${systemPrompt.trim()}\n\nUser: ${prompt}\nAssistant:`;
+                        fullPrompt = `${systemPrompt.trim()}\n\n${prompt}`;
+                        console.log('Combined prompt with system prompt');
+                    } else {
+                        // Default system prompt to prevent fake conversations
+                        fullPrompt = `You are a helpful AI assistant. Answer the user's question directly without simulating conversations or pretending to be the user. Do not generate fake user responses or continue conversations on your own.\n\n${prompt}`;
+                        console.log('Using default system prompt to prevent fake conversations');
                     }
+                    
+                    console.log('Full prompt being sent to model:', fullPrompt);
+                    console.log('=== END GENERATION REQUEST ===');
                     
                     // Start streaming generation
                     this.llm.generateStream(fullPrompt, (text) => {

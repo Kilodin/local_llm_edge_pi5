@@ -532,7 +532,7 @@ function App() {
         setIsLoading(true);
         isInitializingRef.current = true;
         const initConfig = {
-          modelPath: '/home/kilodin/local_llm_edge_pi5/models/tinyllama-1.1b-chat.gguf',
+          modelPath: '/home/kilodin/local_llm_edge_pi5/models/phi-2.gguf',
           contextSize: 2048,
           batchSize: 512,
           threads: 4,
@@ -903,11 +903,14 @@ function App() {
 
     try {
       // Use streaming for better UX
-      socket.emit('generate-stream', {
+      const requestData = {
         prompt: userMessage,
         systemPrompt: systemPrompt,
-        maxTokens: 256
-      });
+        maxTokens: 128
+      };
+      
+      console.log('Frontend sending generation request:', requestData);
+      socket.emit('generate-stream', requestData);
     } catch (error) {
       if (streamingTimeoutRef.current) {
         clearTimeout(streamingTimeoutRef.current);
@@ -1301,7 +1304,11 @@ function App() {
                   <label>Personality & Behavior:</label>
                   <textarea
                     value={systemPrompt}
-                    onChange={(e) => setSystemPrompt(e.target.value)}
+                    onChange={(e) => {
+                      const newPrompt = e.target.value;
+                      console.log('System prompt updated:', newPrompt);
+                      setSystemPrompt(newPrompt);
+                    }}
                     placeholder="Enter system prompt to control the model's personality and behavior..."
                     rows={4}
                     style={{ resize: 'vertical', minHeight: '100px', width: '100%' }}
