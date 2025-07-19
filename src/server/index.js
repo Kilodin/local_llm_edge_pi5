@@ -392,15 +392,21 @@ class LLMServer {
                         return;
                     }
                     
-                    const { prompt, maxTokens = 256 } = data;
+                    const { prompt, systemPrompt, maxTokens = 256 } = data;
                     
                     if (!prompt) {
                         socket.emit('stream-error', { error: 'prompt is required' });
                         return;
                     }
                     
+                    // Combine system prompt with user prompt if provided
+                    let fullPrompt = prompt;
+                    if (systemPrompt && systemPrompt.trim()) {
+                        fullPrompt = `${systemPrompt.trim()}\n\nUser: ${prompt}\nAssistant:`;
+                    }
+                    
                     // Start streaming generation
-                    this.llm.generateStream(prompt, (text) => {
+                    this.llm.generateStream(fullPrompt, (text) => {
                         socket.emit('stream-chunk', { text });
                     }, maxTokens);
                     

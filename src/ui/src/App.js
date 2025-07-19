@@ -183,11 +183,30 @@ function App() {
     threadsBatch: 4,
     ubatchSize: 512
   });
+
+  // System prompt for controlling model personality
+  const [systemPrompt, setSystemPrompt] = useState('You are a helpful AI assistant.');
   const messagesEndRef = useRef(null);
   // Add a dummy state for forced re-render
   const [forceRender, setForceRender] = useState(0);
   // Separate state for streaming content to force re-renders
   const [streamingContent, setStreamingContent] = useState('');
+  // Add state to track cursor position for streaming
+  const [cursorPosition, setCursorPosition] = useState(0);
+
+  // Function to get the current word and position the cursor
+  const getStreamingDisplay = (content) => {
+    if (!content || !content.trim()) {
+      return { displayText: '', cursorPos: 0 };
+    }
+
+    // For streaming, we want the cursor to appear at the very end of the content
+    // This gives the effect of the cursor following the text as it's being typed
+    return { 
+      displayText: content, 
+      cursorPos: content.length 
+    };
+  };
 
   // Supported models for Raspberry Pi
   const supportedModels = [
@@ -373,13 +392,17 @@ function App() {
       console.log('Updated streaming content:', JSON.stringify(currentStreamingContentRef.current));
       console.log('---');
 
-      // Force immediate UI update with flushSync to bypass React batching
+            // Force immediate UI update with flushSync to bypass React batching
       flushSync(() => {
         setStreamingContent(currentStreamingContentRef.current);
-
+        
+        // Update cursor position based on current content
+        const { cursorPos } = getStreamingDisplay(currentStreamingContentRef.current);
+        setCursorPosition(cursorPos);
+        
         setMessages(prev => {
           const newMessages = [...prev];
-
+          
           // Check if we need to create a new assistant message
           if (newMessages.length === 0 || newMessages[newMessages.length - 1].type !== 'assistant') {
             // Create new assistant message with the complete content so far
@@ -395,16 +418,16 @@ function App() {
             return [...newMessages, newMessage];
           } else {
             // Update the existing assistant message with the complete content
-            return newMessages.map((msg, index) =>
-              index === newMessages.length - 1
+            return newMessages.map((msg, index) => 
+              index === newMessages.length - 1 
                 ? {
-                  ...msg,
-                  content: currentStreamingContentRef.current,
-                  isStreaming: true,
-                  // Force new object reference to ensure re-render
-                  _updateTime: Date.now(),
-                  _updateCount: (msg._updateCount || 0) + 1
-                }
+                    ...msg,
+                    content: currentStreamingContentRef.current,
+                    isStreaming: true,
+                    // Force new object reference to ensure re-render
+                    _updateTime: Date.now(),
+                    _updateCount: (msg._updateCount || 0) + 1
+                  }
                 : msg
             );
           }
@@ -882,6 +905,7 @@ function App() {
       // Use streaming for better UX
       socket.emit('generate-stream', {
         prompt: userMessage,
+        systemPrompt: systemPrompt,
         maxTokens: 256
       });
     } catch (error) {
@@ -1044,17 +1068,52 @@ function App() {
                     {message.type === 'assistant' ? (
                       <>
                         {message.content && message.content.trim() ? (
-                          <ReactMarkdown>{message.content}</ReactMarkdown>
+                          message.isStreaming ? (
+                            // For streaming messages, render with dynamic cursor
+                            <div className="streaming-content">
+                              {(() => {
+                                const { displayText, cursorPos } = getStreamingDisplay(message.content);
+                                return (
+                                  <>
+                                    <span>{displayText.slice(0, cursorPos)}</span>
+                                    <span className="streaming-cursor">|</span>
+                                    <span>{displayText.slice(cursorPos)}</span>
+                                  </>
+                                );
+                              })()}
+                            </div>
+                          ) : (
+                            // For completed messages, render normally
+                            <ReactMarkdown>{message.content}</ReactMarkdown>
+                          )
                         ) : (
                           <p style={{ color: 'red' }}>No content available (length: {message.content?.length || 0})</p>
                         )}
-                        {message.isStreaming && <span className="streaming-cursor">|</span>}
                         {message.metrics && <GenerationMetrics metrics={message.metrics} />}
                       </>
                     ) : (
                       <p>{message.content}</p>
                     )}
                     <span className="message-time">{message.timestamp}</span>
+                    {message.type === 'assistant' && (
+                      <span className="generation-status">
+                        {message.isStreaming ? (
+                          <span className="generating-text">
+                            <span className="status-icon loading-icon">⟳</span>
+                            Generating<span className="animated-dots">
+                              <span className="dot">.</span>
+                              <span className="dot">.</span>
+                              <span className="dot">.</span>
+                            </span>
+                          </span>
+                        ) : message.content && message.content.trim() ? (
+                          <span className="completed-text">
+                            <span className="status-icon completed-icon">✓</span>
+                            Generation Completed
+                          </span>
+                        ) : ''}
+                      </span>
+                    )}
                   </div>
                 </div>
               ))
@@ -1235,6 +1294,23 @@ function App() {
                   </button>
                 </div>
               )}
+
+              <div className="parameters-section">
+                <h3>System Prompt</h3>
+                <div className="form-group">
+                  <label>Personality & Behavior:</label>
+                  <textarea
+                    value={systemPrompt}
+                    onChange={(e) => setSystemPrompt(e.target.value)}
+                    placeholder="Enter system prompt to control the model's personality and behavior..."
+                    rows={4}
+                    style={{ resize: 'vertical', minHeight: '100px', width: '100%' }}
+                  />
+                  <small style={{ color: '#666', marginTop: '0.5rem', display: 'block' }}>
+                    This prompt will be sent to the model before each conversation to control its personality, tone, and behavior.
+                  </small>
+                </div>
+              </div>
 
               <div className="parameters-section">
                 <h3>Sampling Parameters</h3>
