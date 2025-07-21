@@ -260,7 +260,11 @@ function App() {
         const filename = path.split('/').pop();
         if (filename) {
           // Remove .gguf extension and clean up the name
-          return filename.replace('.gguf', '').replace(/[-_]/g, ' ');
+          const cleanName = filename.replace('.gguf', '').replace(/[-_]/g, ' ');
+          // Capitalize the first letter of each word
+          return cleanName.split(' ').map(word => 
+            word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+          ).join(' ');
         }
       }
     }
@@ -906,7 +910,7 @@ function App() {
       const requestData = {
         prompt: userMessage,
         systemPrompt: systemPrompt,
-        maxTokens: 128
+        maxTokens: 512
       };
       
       console.log('Frontend sending generation request:', requestData);
@@ -1004,7 +1008,15 @@ function App() {
               <div className="welcome">
                 <Bot size={48} />
                 <h2>Welcome to Local LLM Inference</h2>
-                <p>Initialize a model and start chatting with your local AI!</p>
+                <p>
+                  {isInitialized && modelInfo ? (
+                    <>
+                      <strong>{getModelName(modelInfo) || 'Phi-2'}</strong> is ready! Start chatting with your local AI.
+                    </>
+                  ) : (
+                    'Initialize a model and start chatting with your local AI!'
+                  )}
+                </p>
 
                 {/* Server Status Display */}
                 <div className="server-status">
