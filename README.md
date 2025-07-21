@@ -98,21 +98,23 @@ wget -O models/llama-2-7b-chat.Q4_K_M.gguf \
 This will automatically:
 - Start the server helper on port 4000
 - Start the React UI on port 3000
+- The main LLM server runs on port 3001
+- The React UI proxies API requests to port 3001 (see `src/ui/package.json`)
 - Automatically attempt to start the LLM server when the page loads
 - Show a retry button if the server fails to start
 
 **Alternative: Manual Startup**
 ```bash
-# Start server helper
+# Start server helper (port 4000)
 npm run start:helper
 
-# In another terminal, start the React UI
+# In another terminal, start the React UI (port 3000)
 cd src/ui && npm start
 ```
 
 Open your browser to `http://localhost:3000`
 
-The app will automatically attempt to start the LLM server when the page loads. If it fails, you'll see a "Retry Connection" button.
+The app will automatically attempt to start the LLM server (port 3001) when the page loads. If it fails, you'll see a "Retry Connection" button.
 
 ### Command Line Interface
 
@@ -159,6 +161,15 @@ curl -X POST http://localhost:3001/api/generate \
 # Get model info
 curl http://localhost:3001/api/model-info
 ```
+
+---
+
+**Port Reference:**
+- Server Helper: `4000`
+- Main LLM Server: `3001`
+- React UI: `3000` (proxies API requests to `3001`)
+
+---
 
 ## ⚙️ Configuration
 
